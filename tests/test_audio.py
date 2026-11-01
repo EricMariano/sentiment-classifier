@@ -189,3 +189,58 @@ def test_roles_from_jev_with_redacted_openings() -> None:
 def test_roles_without_jev_assume_who_opens_is_the_agent() -> None:
     utterances = [Utterance("A", 0, 1, "Central X"), Utterance("B", 1, 2, "Oi")]
     assert agent_label(utterances, None) == ("A", None)
+
+
+class FakeTranscriber:
+    def __init__(self, transcript: Transcript) -> None:
+        self.transcript = transcript
+        self.calls = 0
+
+    def transcribe(self, path: Any) -> Transcript:
+        self.calls += 1
+        return self.transcript
+
+
+def _angry_call() -> Transcript:
+    t = _call()
+    t.utterances[3] = Utterance(
+        "cliente", 6.5, 8.5, "Absurdo, quero cancelar e falar com o supervisor"
+    )
+    return t
+
+
+def test_call_graph_runs_the_text_graph_as_a_subgraph() -> None:
+    from sentiment_classifier.audio.pipeline import build_call_graph
+    from sentiment_classifier.classify import OfflineHeuristicClassifier
+    from sentiment_classifier.graph import build_graph, run_config, stream_analysis
+
+    graph = build_call_graph(
+        FakeTranscriber(_angry_call()), build_graph(OfflineHeuristicClassifier())
+    )
+    events = list(stream_analysis(graph, {"path": "ligacao.flac"}, run_config()))
+    kinds = [e.kind for e in events]
+    assert (
+        kinds[:2] == ["transcript", "analysis"] and kinds[-1] == "done"
+    )  # análise vem de dentro do subgrafo
+    final = events[-1].state
+    assert final is not None and len(final["call"].turns) == 4
+    assert [r.turn.index for r in final["readings"]] == [0, 1, 2, 3]
+    assert final["readings"][3].turn.voice is not None  # a voz chegou ao Jev
+
+
+def test_supervisor_pause_crosses_the_subgraph_and_transcription_is_not_redone() -> None:
+    from langgraph.types import Command
+
+    from sentiment_classifier.audio.pipeline import build_call_graph
+    from sentiment_classifier.classify import OfflineHeuristicClassifier
+    from sentiment_classifier.graph import build_graph, memory_checkpointer, run_config
+
+    transcriber = FakeTranscriber(_angry_call())
+    analysis = build_graph(OfflineHeuristicClassifier(), review=True)
+    graph = build_call_graph(transcriber, analysis, checkpointer=memory_checkpointer())
+    config = run_config("ligacao-1")
+    paused = graph.invoke({"path": "ligacao.flac"}, config)
+    assert paused["__interrupt__"]
+    done = graph.invoke(Command(resume={"escalar": False, "nota": "resolvido no retorno"}), config)
+    assert done["review"].escalate is False
+    assert transcriber.calls == 1  # retomar não transcreve de novo

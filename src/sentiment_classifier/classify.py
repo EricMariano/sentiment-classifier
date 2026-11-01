@@ -31,11 +31,29 @@ from sentiment_classifier.questions import (
 
 
 class TurnClassifier(Protocol):
+    """Lê um turno por vez: é a unidade que o grafo distribui com ``Send``."""
+
     name: str
 
-    def read(self, turns: Sequence[Turn]) -> ReadResult:
-        """Uma leitura por turno lido; os que falharam vão em ``failures``."""
+    def read_one(self, turns: Sequence[Turn], index: int) -> TurnReading | TurnFailure:
+        """A leitura do turno ``index`` (com os anteriores como contexto), ou a falha dele."""
         ...
+
+
+def read_all(
+    classifier: TurnClassifier, turns: Sequence[Turn], max_concurrency: int = 8
+) -> ReadResult:
+    """Todos os turnos, em paralelo, fora do grafo (benchmarks e uso avulso).
+
+    Se nenhum turno for lido, levanta erro: uma análise sem nenhuma leitura não é análise.
+    """
+    with ThreadPoolExecutor(max_workers=max_concurrency) as pool:
+        results = list(pool.map(lambda i: classifier.read_one(turns, i), range(len(turns))))
+    readings = [r for r in results if isinstance(r, TurnReading)]
+    failures = [r for r in results if isinstance(r, TurnFailure)]
+    if turns and not readings:
+        raise RuntimeError(f"nenhum turno foi lido; último erro: {failures[-1].error}")
+    return ReadResult(readings, failures)
 
 
 @dataclass
@@ -119,10 +137,9 @@ class Retry:
 class JevTurnClassifier:
     """Uma requisição ao Jev por turno, com todas as perguntas daquele falante.
 
-    As requisições saem em paralelo e cada uma tem suas próprias tentativas. Um turno que
-    continua falhando vira uma ``TurnFailure`` e a análise segue com os demais: a curva
-    fica com uma lacuna em vez de um valor inventado. Se nenhum turno for lido, ou se o
-    erro não for transitório, a análise para com o erro.
+    Cada turno tem suas próprias tentativas. Um turno que continua falhando vira uma
+    ``TurnFailure`` e a análise segue com os demais: a curva fica com uma lacuna em vez de
+    um valor inventado. Erro não transitório (chave inválida) para a análise.
     """
 
     client: TypeSafeClassifier = field(default_factory=TypeSafeClassifier)
@@ -132,29 +149,21 @@ class JevTurnClassifier:
     name: str = "Jev (TypeSafe)"
     usage: Usage = field(default_factory=Usage)
 
-    def read(self, turns: Sequence[Turn]) -> ReadResult:
-        def one(turn: Turn) -> tuple[ClassifierResponse, int]:
-            request: ClassifierRequest = {
-                "state": turn_state(turns, turn.index),  # type: ignore[typeddict-item]
-                "questions": QUESTIONS[turn.speaker],
-            }
-            return self.retry.call(self.client, request, self.cache)
+    def read_one(self, turns: Sequence[Turn], index: int) -> TurnReading | TurnFailure:
+        turn = turns[index]
+        request: ClassifierRequest = {
+            "state": turn_state(turns, index),  # type: ignore[typeddict-item]
+            "questions": QUESTIONS[turn.speaker],
+        }
+        try:
+            response, attempts = self.retry.call(self.client, request, self.cache)
+        except GaveUp as gave_up:  # erro temporário que persistiu: vira lacuna, não leitura
+            return TurnFailure(turn, str(gave_up), gave_up.attempts)
+        self.usage.add(response, attempts)
+        return _reading(turn, response)
 
-        readings: list[TurnReading] = []
-        failures: list[TurnFailure] = []
-        with ThreadPoolExecutor(max_workers=self.max_concurrency) as pool:
-            futures = [(turn, pool.submit(one, turn)) for turn in turns]
-            for turn, future in futures:
-                try:
-                    response, attempts = future.result()
-                except GaveUp as gave_up:
-                    failures.append(TurnFailure(turn, str(gave_up), gave_up.attempts))
-                    continue
-                self.usage.add(response, attempts)
-                readings.append(_reading(turn, response))
-        if turns and not readings:
-            raise RuntimeError(f"nenhum turno foi lido; último erro: {failures[-1].error}")
-        return ReadResult(readings, failures)
+    def read(self, turns: Sequence[Turn]) -> ReadResult:
+        return read_all(self, turns, self.max_concurrency)
 
 
 def _reading(turn: Turn, response: ClassifierResponse) -> TurnReading:
@@ -310,8 +319,11 @@ def _clip(x: float) -> float:
 class OfflineHeuristicClassifier:
     name: str = "heurística offline (não é o Jev)"
 
+    def read_one(self, turns: Sequence[Turn], index: int) -> TurnReading | TurnFailure:
+        return self._read(turns[index])
+
     def read(self, turns: Sequence[Turn]) -> ReadResult:
-        return ReadResult([self._read(t) for t in turns])
+        return read_all(self, turns)
 
     def _read(self, turn: Turn) -> TurnReading:
         text = _norm(turn.text)

@@ -11,13 +11,24 @@ from __future__ import annotations
 import argparse
 import sys
 from pathlib import Path
+from typing import Any
 
 from dotenv import load_dotenv
 from langchain_typesafe import TypeSafeClassifier
+from langgraph.types import Command
 
 from sentiment_classifier.batch import load_conversations, read_report, run_batch, write_reports
+from sentiment_classifier.classify import TurnClassifier
 from sentiment_classifier.csat import FEATURES, CsatModel, evaluate
-from sentiment_classifier.graph import analyze
+from sentiment_classifier.graph import (
+    AnalysisState,
+    Graph,
+    build_graph,
+    memory_checkpointer,
+    run_config,
+    sqlite_checkpointer,
+    stream_analysis,
+)
 from sentiment_classifier.models import Turn
 from sentiment_classifier.parsing import parse_chat
 from sentiment_classifier.providers import (
@@ -27,7 +38,6 @@ from sentiment_classifier.providers import (
     make_csat_estimator,
     make_summarizer,
 )
-from sentiment_classifier.summarize import SummaryUnavailable
 
 
 def cmd_analisar(args: argparse.Namespace) -> None:
@@ -35,9 +45,7 @@ def cmd_analisar(args: argparse.Namespace) -> None:
 
 
 def cmd_ligacao(args: argparse.Namespace) -> None:
-    from dataclasses import replace
-
-    from sentiment_classifier.audio.pipeline import transcribe_call
+    from sentiment_classifier.audio.pipeline import build_call_graph
     from sentiment_classifier.audio.transcribe import (
         LocalStereoTranscriber,
         OpenAIDiarizedTranscriber,
@@ -49,25 +57,33 @@ def cmd_ligacao(args: argparse.Namespace) -> None:
         else LocalStereoTranscriber(agent_channel=args.canal_atendente)
     )
     role_client = None if args.offline or not has_jev() else TypeSafeClassifier()
-    call = transcribe_call(args.arquivo, transcriber, role_client)
-    print(f"ligação de {call.duration:.0f}s, {len(call.turns)} turnos")
-    if call.agent_confidence is not None:
-        print(f"atendente identificado pelo Jev (confiança {call.agent_confidence:.2f})")
-    for t, c in zip(call.turns, call.call, strict=True):
-        print(f"  {c.start:6.1f}s {t.speaker:<9} {t.text}")
-        print(f"          voz: {t.voice}")
-    turns = [replace(t, voice=None) for t in call.turns] if args.sem_voz else call.turns
-    print("\n(sem sinais de voz: só o texto vai para o Jev)" if args.sem_voz else "")
-    report(turns, args)
-
-
-def report(turns: list[Turn], args: argparse.Namespace) -> None:
-    classifier = make_classifier(args.offline)
-    # O resumo do LLM vem depois, aos pedaços: as leituras do Jev aparecem na hora.
-    state = analyze(
-        turns, classifier, None, args.nome, make_csat_estimator(args.offline), load_csat_model()
+    classifier, analysis, review = analysis_graph(args)
+    graph = build_call_graph(
+        transcriber, analysis, role_client, memory_checkpointer() if review else None
     )
-    print(f"classificador: {classifier.name}")
+    request: dict[str, Any] = {"path": str(args.arquivo), "known_names": args.nome}
+    if args.sem_voz:
+        request["without_voice"] = True
+        print("(sem sinais de voz: só o texto vai para o Jev)")
+    run(graph, request, classifier.name)  # type: ignore[arg-type]
+
+
+def analysis_graph(args: argparse.Namespace) -> tuple[TurnClassifier, Graph, bool]:
+    classifier = make_classifier(args.offline)
+    review = getattr(args, "revisar", False)
+    graph = build_graph(
+        classifier,
+        make_summarizer(args.offline),
+        make_csat_estimator(args.offline),
+        load_csat_model(),
+        review=review,
+        checkpointer=memory_checkpointer() if review else None,
+    )
+    return classifier, graph, review
+
+
+def print_analysis(state: AnalysisState, classifier_name: str) -> None:
+    print(f"classificador: {classifier_name}")
     print(f"dados pessoais removidos: {state['redaction_counts'] or 'nenhum'}")
     if state["failures"]:
         print(f"turnos sem leitura: {[f.turn.index for f in state['failures']]}")
@@ -84,18 +100,64 @@ def report(turns: list[Turn], args: argparse.Namespace) -> None:
     if state["csat_predicted"] is not None:
         print(f"satisfação pelo modelo calibrado: {state['csat_predicted']:.1f}")
     print()
-    llm = make_summarizer(args.offline) if state["dynamics"].key_turns else None
-    if llm is None:
-        print(state["summary"].text)
-        return
-    try:
-        for piece in llm.stream(state["redacted"], state["readings"], state["dynamics"]):
-            print(piece, end="", flush=True)
+
+
+def report(turns: list[Turn], args: argparse.Namespace) -> None:
+    classifier, graph, _ = analysis_graph(args)
+    run(graph, {"turns": turns, "known_names": args.nome}, classifier.name)
+
+
+def run(graph: Graph, request: AnalysisState | Command[Any], classifier_name: str) -> None:
+    """Roda o grafo em streaming: a análise do Jev aparece na hora, o resumo aos pedaços e,
+    com ``--revisar``, o grafo pausa para você decidir se escala."""
+    config = run_config("terminal")
+    shown = streamed = False
+    final: AnalysisState = {}
+    while True:
+        pending = None
+        for event in stream_analysis(graph, request, config):
+            if event.kind == "transcript":
+                call = event.payload
+                print(f"ligação de {call.duration:.0f}s, {len(call.turns)} turnos")
+                if call.agent_confidence is not None:
+                    print(
+                        f"atendente identificado pelo Jev (confiança {call.agent_confidence:.2f})"
+                    )
+                for t, c in zip(call.turns, call.call, strict=True):
+                    print(f"  {c.start:6.1f}s {t.speaker:<9} {t.text}")
+                    print(f"          voz: {(t.voice or {}).get('leitura', '-')}")
+                print()
+            elif event.kind == "analysis" and not shown and event.state is not None:
+                print_analysis(event.state, classifier_name)
+                shown = True
+            elif event.kind == "token":
+                print(event.text, end="", flush=True)
+                streamed = True
+            elif event.kind == "interrupt":
+                pending = event.payload
+            elif event.kind == "done" and event.state is not None:
+                final = event.state
+        if pending is None:
+            break
+        if streamed:
+            print()
+        print(f"\n>>> {pending['pergunta']}")
+        for a in pending["alertas"]:
+            print(f"    {a['tipo']} no turno {a['turno']}: {a['motivo']}")
+        answer = input("    escalar? [s/N] ").strip().lower()
+        note = input("    observação (opcional): ").strip()
+        request = Command(resume={"escalar": answer.startswith("s"), "nota": note})
+    summary = final["summary"]
+    if summary.note or not streamed:
+        if summary.note:
+            print(f"[{summary.note}]")
+        print(summary.text)
+    else:
         print()
-    except SummaryUnavailable as error:
-        cause = type(error.__cause__ or error).__name__
-        print(f"[LLM indisponível ({cause}); resumo montado dos sinais.]")
-        print(state["summary"].text)
+    decision = final.get("review")
+    if decision is not None:
+        verdict = "ESCALAR" if decision.escalate else "não escalar"
+        print(f"\nrevisão: {verdict}" + (f" ({decision.note})" if decision.note else ""))
 
 
 def cmd_lote(args: argparse.Namespace) -> None:
@@ -108,6 +170,7 @@ def cmd_lote(args: argparse.Namespace) -> None:
     def progress(n: int, total: int, row: object) -> None:
         print(f"\r{n}/{total}", end="", file=sys.stderr, flush=True)
 
+    stats: dict[str, int] = {}
     rows = run_batch(
         items,
         classifier,
@@ -116,8 +179,16 @@ def cmd_lote(args: argparse.Namespace) -> None:
         load_csat_model(),
         progress,
         args.paralelo,
+        sqlite_checkpointer(str(args.retomar)) if args.retomar else None,
+        stats,
     )
     csv_path, jsonl_path = write_reports(rows, args.saida)
+    if args.retomar:
+        print(
+            f"\ncheckpoint: {stats['novas']} novas, {stats['retomadas']} retomadas, "
+            f"{stats['prontas']} já prontas",
+            file=sys.stderr,
+        )
     print(file=sys.stderr)
     flagged = [r for r in rows if r.alertas or r.erro]
     print(f"\n{len(flagged)} de {len(rows)} conversas pedem atenção:\n")
@@ -163,6 +234,7 @@ def main() -> None:
     p.add_argument("arquivo", type=Path)
     p.add_argument("--offline", action="store_true", help="não chama Jev nem LLM")
     p.add_argument("--nome", action="append", default=[], help="nome conhecido a anonimizar")
+    p.add_argument("--revisar", action="store_true", help="pausa para você decidir se escala")
     p.set_defaults(fn=cmd_analisar)
 
     p = sub.add_parser("ligacao", help="uma ligação gravada (requer o extra audio)")
@@ -174,6 +246,7 @@ def main() -> None:
         help="áudio mono: transcreve e separa falantes na OpenAI (o áudio sai da máquina)",
     )
     p.add_argument("--sem-voz", action="store_true", help="ignora os sinais de voz (comparação)")
+    p.add_argument("--revisar", action="store_true", help="pausa para você decidir se escala")
     p.add_argument("--offline", action="store_true")
     p.add_argument("--nome", action="append", default=[])
     p.set_defaults(fn=cmd_ligacao)
@@ -186,6 +259,12 @@ def main() -> None:
         "--com-llm", action="store_true", help="resumo com LLM nas conversas com virada ou alerta"
     )
     p.add_argument("--paralelo", type=int, default=4, help="conversas analisadas ao mesmo tempo")
+    p.add_argument(
+        "--retomar",
+        type=Path,
+        metavar="CHECKPOINT.sqlite",
+        help="salva cada passo em disco; rodando de novo, retoma de onde parou",
+    )
     p.set_defaults(fn=cmd_lote)
 
     csat = sub.add_parser("csat", help="avaliar ou treinar a nota de satisfação").add_subparsers(

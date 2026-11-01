@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import time
-from collections.abc import Callable, Iterator, Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from typing import Literal, Protocol, TypeVar
 
@@ -14,7 +14,7 @@ from langchain_core.exceptions import (
     ModelTimeoutError,
 )
 from langchain_core.language_models import BaseChatModel
-from langchain_core.messages import BaseMessage, BaseMessageChunk, HumanMessage, SystemMessage
+from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage
 
 from sentiment_classifier.models import Dynamics, Turn, TurnReading
 
@@ -163,33 +163,6 @@ class LLMSummarizer:
         messages = self._messages(turns, readings, dynamics)
         message = self._retrying(lambda: self.model.invoke(messages))
         return Summary(message.text, "llm", len(dynamics.key_turns))
-
-    def stream(
-        self, turns: Sequence[Turn], readings: Sequence[TurnReading], dynamics: Dynamics
-    ) -> Iterator[str]:
-        """O texto aos pedaços, para mostrar enquanto o LLM escreve.
-
-        Só repete se falhar antes do primeiro pedaço: depois disso, repetir duplicaria texto
-        já mostrado.
-        """
-        messages = self._messages(turns, readings, dynamics)
-
-        def open_stream() -> tuple[str, Iterator[BaseMessageChunk]]:
-            chunks = iter(self.model.stream(messages))
-            for chunk in chunks:
-                if chunk.text:
-                    return chunk.text, chunks
-            return "", chunks
-
-        first, rest = self._retrying(open_stream)  # cada tentativa recomeça do zero
-        if first:
-            yield first
-        try:
-            for chunk in rest:
-                if chunk.text:
-                    yield chunk.text
-        except Exception as error:
-            raise SummaryUnavailable(f"{type(error).__name__}: {error}") from error
 
 
 class TemplateSummarizer:

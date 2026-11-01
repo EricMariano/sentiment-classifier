@@ -4,13 +4,16 @@ from __future__ import annotations
 
 import os
 import tempfile
+import uuid
 from dataclasses import asdict, replace
 from pathlib import Path
+from typing import Any
 
 import altair as alt
 import pandas as pd
 import streamlit as st
 from dotenv import load_dotenv
+from langgraph.types import Command
 
 from sentiment_classifier.batch import CSV_COLUMNS, load_conversations, run_batch
 from sentiment_classifier.classify import (
@@ -18,8 +21,16 @@ from sentiment_classifier.classify import (
     OfflineHeuristicClassifier,
     TurnClassifier,
 )
-from sentiment_classifier.graph import AnalysisState, analyze
-from sentiment_classifier.models import Turn
+from sentiment_classifier.graph import (
+    AnalysisState,
+    Graph,
+    analyze,
+    build_graph,
+    finalize,
+    memory_checkpointer,
+    run_config,
+    stream_analysis,
+)
 from sentiment_classifier.parsing import parse_chat
 from sentiment_classifier.providers import (
     has_jev,
@@ -28,7 +39,6 @@ from sentiment_classifier.providers import (
     make_csat_estimator,
     make_summarizer,
 )
-from sentiment_classifier.summarize import SummaryUnavailable
 
 load_dotenv()
 ROOT = Path(__file__).parent
@@ -61,46 +71,93 @@ with st.sidebar:
     names = st.text_input(
         "Nomes conhecidos para anonimizar", help="Separados por vírgula, como viriam do CRM."
     )
+    review_on = st.toggle(
+        "Revisão do supervisor antes de escalar",
+        value=True,
+        help="Com alerta de escalada ou cancelamento, o grafo pausa (interrupt do LangGraph) "
+        "e só termina depois da sua decisão.",
+    )
 known_names = [n for n in names.split(",") if n.strip()]
 
 
-def run_analysis(turns: list[Turn]) -> tuple[AnalysisState, TurnClassifier]:
-    classifier = make_classifier(offline)
-    # Sem resumidor aqui: o grafo devolve tudo do Jev em ~1 s, e o resumo do LLM é escrito
-    # depois, na tela, enquanto a pessoa já lê a curva e os alertas.
-    with st.spinner(f"Lendo {len(turns)} turnos com {classifier.name}…"):
-        state = analyze(
-            turns, classifier, None, known_names, make_csat_estimator(offline), csat_model
-        )
-    return state, classifier
+def analysis_graph(classifier: TurnClassifier, own_checkpointer: bool) -> Graph:
+    """O grafo do texto. Na ligação ele vira subgrafo e usa o checkpointer do grafo de fora."""
+    return build_graph(
+        classifier,
+        make_summarizer(offline),
+        make_csat_estimator(offline),
+        csat_model,
+        review=review_on,
+        checkpointer=memory_checkpointer() if own_checkpointer else None,
+    )
 
 
-def llm_summary(state: AnalysisState, key: str) -> None:
-    """Escreve o resumo do LLM aos pedaços; guarda o texto para não pagar de novo a cada clique."""
-    summary, dyn = state["summary"], state["dynamics"]
-    llm = make_summarizer(offline) if dyn.key_turns else None
-    stored = st.session_state.get(f"llm-{key}")
-    if llm is None:
-        st.caption("Montada dos sinais, sem LLM")
-        if summary.note:
-            st.info(summary.note, icon="ℹ️")
-        st.markdown(summary.text)
-        return
-    st.caption(f"Escrita pelo LLM a partir de {len(dyn.key_turns)} turnos-chave")
-    if stored is None:
-        try:
-            text = st.write_stream(llm.stream(state["redacted"], state["readings"], dyn))
-            stored = (str(text), None)
-        except SummaryUnavailable as error:
-            cause = type(error.__cause__ or error).__name__
-            stored = (summary.text, f"LLM indisponível ({cause}); resumo montado dos sinais.")
-        st.session_state[f"llm-{key}"] = stored
-        if stored[1] is None:
-            return  # o texto já está na tela
-    text, note = stored
-    if note:
-        st.info(note, icon="ℹ️")
-    st.markdown(text)
+def run_live(graph: Any, request: Any, key: str, classifier: TurnClassifier) -> None:
+    """Roda o grafo mostrando o progresso: a análise do Jev primeiro, depois o resumo do LLM
+    sendo escrito. Guarda o resultado (e a pausa para revisão, se houver) na sessão."""
+    config = run_config(f"{key}-{uuid.uuid4().hex[:8]}")
+    progress = st.empty()
+    live = st.container()
+    progress.info("Lendo os turnos com o Jev…", icon="⏳")
+    box = None
+    written = ""
+    pending = None
+    final: AnalysisState = {}
+    for event in stream_analysis(graph, request, config):
+        if event.kind == "transcript":
+            progress.info("Ligação transcrita. Lendo os turnos com o Jev…", icon="⏳")
+        elif event.kind == "analysis" and event.state is not None:
+            progress.info("Jev pronto. O LLM está escrevendo sobre os momentos-chave…", icon="✍️")
+            with live:
+                box = render(event.state, classifier, key, live=True)
+        elif event.kind == "token" and box is not None:
+            written += event.text
+            box.markdown(written + " ▌")
+        elif event.kind == "interrupt":
+            pending = event.payload
+        elif event.kind == "done" and event.state is not None:
+            final = event.state
+    st.session_state[key] = {
+        "graph": graph,
+        "config": config,
+        "classifier": classifier,
+        "state": final,
+        "pending": pending,
+    }
+    st.rerun()
+
+
+def review_panel(key: str) -> None:
+    """O grafo pausou antes de escalar: o supervisor decide e o grafo retoma (Command)."""
+    data = st.session_state[key]
+    pending, decision = data.get("pending"), data["state"].get("review")
+    if pending:
+        with st.container(border=True):
+            st.markdown(f"**Revisão do supervisor.** {pending['pergunta']}")
+            for a in pending["alertas"]:
+                st.markdown(
+                    f"- {ALERT_ICON[a['tipo']]} **{a['tipo']}** no turno {a['turno']}: {a['motivo']}"
+                )
+            st.caption(
+                f"Satisfação estimada: {pending['satisfacao_estimada']} / 5. O grafo está "
+                "pausado (interrupt) e só termina com a sua decisão."
+            )
+            note = st.text_input("Observação (opcional)", key=f"note-{key}")
+            c1, c2, _ = st.columns([1, 1, 3])
+            choice = None
+            if c1.button("Escalar", type="primary", key=f"yes-{key}"):
+                choice = True
+            if c2.button("Não escalar", key=f"no-{key}"):
+                choice = False
+            if choice is not None:
+                state = data["graph"].invoke(
+                    Command(resume={"escalar": choice, "nota": note}), data["config"]
+                )
+                data["state"], data["pending"] = finalize(state), None
+                st.rerun()
+    elif decision is not None:
+        text = "Escalado pelo supervisor" if decision.escalate else "Supervisor decidiu não escalar"
+        st.success(text + (f": {decision.note}" if decision.note else "."), icon="🧑‍💼")
 
 
 def curve_chart(state: AnalysisState) -> alt.LayerChart:
@@ -160,7 +217,9 @@ def curve_chart(state: AnalysisState) -> alt.LayerChart:
     return alt.layer(*layers).properties(height=320)
 
 
-def render(state: AnalysisState, classifier: TurnClassifier, key: str) -> None:
+def render(state: AnalysisState, classifier: TurnClassifier, key: str, live: bool = False) -> Any:
+    """Desenha a análise. Com ``live=True`` (o LLM ainda escrevendo), devolve o espaço onde o
+    resumo vai aparecendo."""
     readings, dyn, csat = state["readings"], state["dynamics"], state["csat"]
     if isinstance(classifier, OfflineHeuristicClassifier):
         st.warning(
@@ -225,7 +284,20 @@ def render(state: AnalysisState, classifier: TurnClassifier, key: str) -> None:
     left, right = st.columns([3, 2])
     with left:
         st.subheader("Análise")
-        llm_summary(state, key)
+        slot = None
+        if live:
+            st.caption(f"O LLM está escrevendo a partir de {len(dyn.key_turns)} turnos-chave…")
+            slot = st.empty()
+        else:
+            summary = state["summary"]
+            st.caption(
+                f"Escrita pelo LLM a partir de {len(dyn.key_turns)} turnos-chave"
+                if summary.source == "llm"
+                else "Montada dos sinais, sem LLM"
+            )
+            if summary.note:
+                st.info(summary.note, icon="ℹ️")
+            st.markdown(summary.text)
         if dyn.turning_points:
             st.caption('Lembrete: "antes de" não é "por causa de".')
     with right:
@@ -258,7 +330,13 @@ def render(state: AnalysisState, classifier: TurnClassifier, key: str) -> None:
             if r.turn.voice:
                 row["voz"] = r.turn.voice.get("leitura", "")
             rows.append(row)
-        st.dataframe(pd.DataFrame(rows), hide_index=True, use_container_width=True, key=f"t-{key}")
+        st.dataframe(
+            pd.DataFrame(rows),
+            hide_index=True,
+            use_container_width=True,
+            key=f"t-{key}-{'live' if live else 'final'}",
+        )
+    return slot
 
 
 tab_text, tab_call, tab_batch = st.tabs(["💬 Conversa", "📞 Ligação", "📋 Lote"])
@@ -275,12 +353,16 @@ with tab_text:
     # custa uma requisição ao Jev por turno.
     if st.button("Analisar", type="primary", disabled=not raw.strip()):
         try:
-            st.session_state.text = run_analysis(parse_chat(raw))
-            st.session_state.pop("llm-text", None)
+            turns = parse_chat(raw)
         except ValueError as exc:
             st.error(f"Não consegui ler a conversa: {exc}")
+        else:
+            classifier = make_classifier(offline)
+            graph = analysis_graph(classifier, own_checkpointer=True)
+            run_live(graph, {"turns": turns, "known_names": known_names}, "text", classifier)
     if "text" in st.session_state:
-        render(*st.session_state.text, key="text")
+        review_panel("text")
+        render(st.session_state.text["state"], st.session_state.text["classifier"], "text")
 
 # --- Lote ---------------------------------------------------------------------------------
 with tab_batch:
@@ -331,7 +413,7 @@ with tab_batch:
 # --- Ligação (por último: depende do extra de áudio) --------------------------------------
 with tab_call:
     try:
-        from sentiment_classifier.audio.pipeline import transcribe_call
+        from sentiment_classifier.audio.pipeline import build_call_graph
         from sentiment_classifier.audio.transcribe import (
             LocalStereoTranscriber,
             OpenAIDiarizedTranscriber,
@@ -391,27 +473,40 @@ with tab_call:
             from langchain_typesafe import TypeSafeClassifier
 
             role_client = TypeSafeClassifier()
+        classifier = make_classifier(offline)
+        # A análise do texto entra como subgrafo do grafo da ligação.
+        graph = build_call_graph(
+            transcriber,
+            analysis_graph(classifier, own_checkpointer=False),
+            role_client,
+            memory_checkpointer(),
+        )
+        if compare:
+            st.session_state.pop("call_text_only", None)
+            st.session_state.compare_next = True
         try:
-            with st.spinner("Transcrevendo e medindo a voz…"):
-                call = transcribe_call(audio_path, transcriber, role_client)
+            run_live(
+                graph, {"path": str(audio_path), "known_names": known_names}, "call", classifier
+            )
         except ValueError as exc:
             st.error(str(exc))
             st.stop()
-        state, classifier = run_analysis(call.turns)
-        text_only = None
-        if compare:
-            # Só as leituras do Jev: a comparação não precisa de resumo nem de nota.
-            with st.spinner("Lendo de novo, só pelo texto…"):
-                text_only = analyze(
-                    [replace(t, voice=None) for t in call.turns],
-                    make_classifier(offline),
-                    known_names=known_names,
-                )
-        st.session_state.call = (call, state, classifier, text_only)
-        st.session_state.pop("llm-call", None)
+
+    if "call" in st.session_state and st.session_state.pop("compare_next", False):
+        # Só as leituras do Jev, sem voz: a comparação não precisa de resumo nem de nota.
+        with st.spinner("Lendo de novo, só pelo texto…"):
+            call_turns = st.session_state.call["state"]["call"].turns
+            st.session_state.call_text_only = analyze(
+                [replace(t, voice=None) for t in call_turns],
+                make_classifier(offline),
+                known_names=known_names,
+            )
 
     if "call" in st.session_state:
-        call, state, classifier, text_only = st.session_state.call
+        data = st.session_state.call
+        state, classifier = data["state"], data["classifier"]
+        call, text_only = state["call"], st.session_state.get("call_text_only")
+        review_panel("call")
         if call.agent_confidence is not None:
             st.caption(f"Atendente identificado pelo Jev (confiança {call.agent_confidence:.2f}).")
         with st.expander(f"Transcrição e voz ({call.duration:.0f}s, {len(call.turns)} turnos)"):

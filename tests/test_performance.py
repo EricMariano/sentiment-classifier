@@ -1,9 +1,8 @@
-"""Cache, desistência rápida do LLM, streaming e lote em paralelo."""
+"""Cache, desistência rápida do LLM e lote em paralelo."""
 
 import sqlite3
 import threading
 import time
-from collections.abc import Iterator
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -89,11 +88,6 @@ class FakeModel:
         self._maybe_fail()
         return Chunk(self.reply)
 
-    def stream(self, messages: Any) -> Iterator[Chunk]:
-        self._maybe_fail()
-        for word in self.reply.split(" "):
-            yield Chunk(word + " ")
-
 
 def _summarizer(model: FakeModel) -> LLMSummarizer:
     return LLMSummarizer(model, sleep=lambda _: None)  # type: ignore[arg-type]
@@ -115,34 +109,31 @@ def test_transient_llm_error_is_retried() -> None:
     assert model.calls == 2
 
 
-def test_stream_retries_only_before_the_first_piece() -> None:
-    model = FakeModel([ModelRateLimitError("slow down")])
-    assert "".join(_summarizer(model).stream(*ARGS)) == "resumo pronto "
-    assert model.calls == 2
-
-
 # --- lote em paralelo ----------------------------------------------------------------------
 
 
 class SlowOffline(OfflineHeuristicClassifier):
-    """Heurística com espera, para o paralelismo aparecer no relógio."""
+    """Heurística com espera; conta quantas conversas diferentes estão sendo lidas juntas."""
 
     def __init__(self) -> None:
         super().__init__()
-        self.active = 0
+        self.active: dict[int, int] = {}
         self.peak = 0
         self._lock = threading.Lock()
 
-    def read(self, turns: Any) -> Any:
+    def read_one(self, turns: Any, index: int) -> Any:
+        key = id(turns)  # a mesma conversa chega a todas as tarefas com a mesma lista
         with self._lock:
-            self.active += 1
-            self.peak = max(self.peak, self.active)
+            self.active[key] = self.active.get(key, 0) + 1
+            self.peak = max(self.peak, len(self.active))
         time.sleep(0.05)
         try:
-            return super().read(turns)
+            return super().read_one(turns, index)
         finally:
             with self._lock:
-                self.active -= 1
+                self.active[key] -= 1
+                if not self.active[key]:
+                    del self.active[key]
 
 
 def test_batch_runs_conversations_concurrently_with_the_same_results() -> None:

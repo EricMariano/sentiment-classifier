@@ -7,7 +7,7 @@ from conftest import reading
 from sentiment_classifier.classify import GaveUp
 from sentiment_classifier.csat import CsatEstimate, CsatModel
 from sentiment_classifier.graph import analyze
-from sentiment_classifier.models import Dynamics, ReadResult, Turn, TurnFailure, TurnReading
+from sentiment_classifier.models import Dynamics, Turn, TurnFailure, TurnReading
 from sentiment_classifier.parsing import parse_chat
 from sentiment_classifier.summarize import Summary, SummaryUnavailable, build_prompt
 
@@ -20,22 +20,13 @@ class ScriptedClassifier:
     seen: list[Turn] = field(default_factory=list)
     fail: set[int] = field(default_factory=set)
 
-    def read(self, turns: Sequence[Turn]) -> ReadResult:
-        self.seen.extend(turns)
-        failures = [TurnFailure(t, "rede", 4) for t in turns if t.index in self.fail]
-        return ReadResult(
-            [
-                reading(
-                    t.index,
-                    t.speaker,
-                    self.sentiments[t.index],
-                    text=t.text,
-                    **self.flags.get(t.index, {}),
-                )
-                for t in turns
-                if t.index not in self.fail
-            ],
-            failures,
+    def read_one(self, turns: Sequence[Turn], index: int) -> TurnReading | TurnFailure:
+        t = turns[index]
+        self.seen.append(t)
+        if t.index in self.fail:
+            return TurnFailure(t, "rede", 4)
+        return reading(
+            t.index, t.speaker, self.sentiments[t.index], text=t.text, **self.flags.get(t.index, {})
         )
 
 

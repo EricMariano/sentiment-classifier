@@ -14,14 +14,18 @@ from __future__ import annotations
 
 import csv
 import json
+import threading
 from collections.abc import Callable, Iterator, Sequence
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
+from langgraph.types import Checkpointer
+
+from sentiment_classifier.anonymize import redact_turns
 from sentiment_classifier.classify import TurnClassifier
 from sentiment_classifier.csat import CsatEstimator, CsatModel
-from sentiment_classifier.graph import AnalysisState, analyze
+from sentiment_classifier.graph import AnalysisState, build_graph, finalize, run_config
 from sentiment_classifier.models import Turn
 from sentiment_classifier.parsing import parse_chat, turns_from_messages
 from sentiment_classifier.summarize import Summarizer
@@ -125,26 +129,51 @@ def run_batch(
     csat_model: CsatModel | None = None,
     on_progress: Callable[[int, int, BatchRow], None] | None = None,
     max_conversations: int = 4,
+    checkpointer: Checkpointer = None,
+    stats: dict[str, int] | None = None,
 ) -> list[BatchRow]:
-    """Analisa ``max_conversations`` conversas ao mesmo tempo.
+    """Analisa ``max_conversations`` conversas ao mesmo tempo, num grafo só.
 
-    Cada conversa já lê seus turnos em paralelo, mas ela é curta: sem isso, o lote passa a
-    maior parte do tempo esperando a última requisição de uma conversa antes de começar a
-    próxima.
+    Cada conversa já lê seus turnos em paralelo (fan-out no grafo), mas é curta: sem isso,
+    o lote passaria a maior parte do tempo esperando a última requisição de uma conversa.
+
+    Com ``checkpointer``, cada conversa é uma *thread* do LangGraph (o id dela): numa nova
+    execução, as conversas terminadas vêm prontas do checkpoint e as que pararam no meio
+    retomam do último passo salvo. As conversas são anonimizadas **antes** de entrar no
+    grafo, para que o checkpoint em disco não guarde dado pessoal. ``stats`` recebe quantas
+    foram ``novas``, ``retomadas`` e ``prontas``.
     """
+    graph = build_graph(
+        classifier, summarizer, csat_estimator, csat_model, checkpointer=checkpointer
+    )
+    counts = stats if stats is not None else {}
+    for key in ("novas", "retomadas", "prontas"):
+        counts.setdefault(key, 0)
+    lock = threading.Lock()
+
+    def count(key: str) -> None:
+        with lock:
+            counts[key] += 1
 
     def one(item: Conversation | tuple[str, str]) -> BatchRow:
         if isinstance(item, tuple):
             return BatchRow(id=item[0], erro=item[1])
         try:
-            state = analyze(
-                item.turns,
-                classifier,
-                summarizer,
-                csat_estimator=csat_estimator,
-                csat_model=csat_model,
-            )
-            return _row(item, state)
+            if checkpointer is None:
+                state = graph.invoke({"turns": item.turns}, run_config())
+                count("novas")
+                return _row(item, finalize(state))
+            config = run_config(item.id)
+            snapshot = graph.get_state(config)
+            if snapshot.values and not snapshot.next:
+                count("prontas")
+                return _row(item, finalize(snapshot.values))
+            if snapshot.values:
+                count("retomadas")
+                return _row(item, finalize(graph.invoke(None, config)))
+            count("novas")
+            turns = redact_turns(item.turns).turns  # o checkpoint não guarda dado pessoal
+            return _row(item, finalize(graph.invoke({"turns": turns}, config)))
         except Exception as error:  # uma conversa ruim não derruba o lote
             return BatchRow(
                 id=item.id,

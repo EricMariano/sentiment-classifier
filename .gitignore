@@ -23,3 +23,6 @@ csat_model.json
 # Configuração local do Claude Code (caminhos da máquina)
 .claude/
 .cache/
+
+# Checkpoints locais do LangGraph (--retomar)
+*.sqlite

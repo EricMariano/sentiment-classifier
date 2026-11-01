@@ -5,9 +5,11 @@ Em vez de dizer só se uma frase é positiva ou negativa, mostra **como a conver
 em que turno o cliente virou, qual fala do atendente veio antes, se há risco de cancelamento
 e que nota de satisfação o cliente daria.
 
-**Como:** o [Jev](https://docs.langchain.com/oss/python/integrations/providers/typesafe)
-(TypeSafe) toma as decisões baratas de cada turno; um LLM só escreve sobre os poucos momentos
-que importam. Dados pessoais são anonimizados antes de sair da máquina.
+**Como:** um grafo do **LangGraph** distribui os turnos em paralelo (`Send`) para o
+[Jev](https://docs.langchain.com/oss/python/integrations/providers/typesafe) (TypeSafe), que
+toma as decisões baratas de cada turno; um LLM só escreve sobre os poucos momentos que
+importam; e, antes de escalar um caso, o grafo pausa e espera um supervisor (`interrupt`).
+Dados pessoais são anonimizados antes de sair da máquina.
 
 | O que foi medido | Resultado |
 |---|---|
@@ -20,6 +22,8 @@ que importam. Dados pessoais são anonimizados antes de sair da máquina.
 
 ![Análise escrita pelo LLM a partir dos turnos-chave, ao lado dos alertas de cancelamento e escalada](docs/img/analise.jpg)
 
+![O grafo pausado: o supervisor vê os alertas e decide se escala antes de a análise terminar](docs/img/revisao.jpg)
+
 Os números vêm de pilotos (uma execução cada, conversas traduzidas do chinês); método,
 limites e o que não funcionou estão em [Resultados](#resultados-até-agora) e em
 [`benchmarks/`](benchmarks/).
@@ -29,22 +33,41 @@ python3 -m venv .venv && .venv/bin/python -m pip install -e ".[app,audio,openrou
 .venv/bin/python -m streamlit run app.py      # sem chaves, roda em modo offline
 ```
 
-## A ideia central: decisões baratas por turno, LLM só no que importa
+## Orquestração com LangGraph: decisões baratas por turno, LLM só no que importa
+
+A análise inteira é um grafo do LangGraph ([`graph.py`](src/sentiment_classifier/graph.py)).
+Cada recurso abaixo tem um teste que o demonstra em
+[`tests/test_orchestration.py`](tests/test_orchestration.py) (e no lote e no áudio):
 
 ```mermaid
 flowchart LR
-    AU[ligação estéreo] --> W[Whisper local por canal<br/>+ sinais de voz]
-    AU2[ligação mono] -.->|opcional, sai da máquina| OD[OpenAI diarize<br/>+ Jev escolhe o atendente]
-    OD --> W2[sinais de voz]
-    C[chat] --> A
-    W --> A
-    W2 --> A
-    A[anonimizar<br/>CPF, cartão, nome...] --> J[Jev, 1 requisição por turno<br/>Score + Choice + Noul<br/>texto + voz no mesmo JSON]
-    J --> G[agregar sem LLM<br/>curvas, viradas, alertas]
-    G --> S[satisfação<br/>1 Score do Jev na conversa]
-    S -->|há virada ou alerta| L[LLM: resumo dos<br/>momentos-chave]
-    S -->|conversa estável| T[resumo por template<br/>sem LLM]
+    S([START]) --> A[anonymize]
+    A -- "Send × N turnos" --> R[read_turn<br/>Jev, 1 por turno]
+    A --> C[estimate_csat<br/>Jev, conversa inteira]
+    R --> G[aggregate<br/>curvas, viradas, alertas]
+    C --> G
+    G -->|há momento-chave| L[summarize_llm]
+    G -->|conversa estável| T[summarize_template]
+    L --> V{review<br/>interrupt}
+    T --> V
+    V -->|supervisor decide| E([END])
 ```
+
+| Recurso do LangGraph | Para que serve aqui |
+|---|---|
+| **Fan-out com `Send`** | cada turno vira uma tarefa paralela do grafo (`read_turn`); um reducer (`operator.add`) junta as leituras que chegam fora de ordem |
+| **Ramos paralelos com junção** | a nota de satisfação roda ao mesmo tempo que os turnos; `aggregate` só começa quando os dois ramos terminam |
+| **Aresta condicional** | o LLM só é chamado quando há ponto de virada ou alerta; conversa estável fica no template, sem custo |
+| **Streaming (`stream_mode="messages"`)** | a curva e os alertas aparecem quando `aggregate` termina (~1 s); o resumo do LLM chega aos pedaços, de dentro do grafo |
+| **Humano no circuito (`interrupt` + `Command`)** | com alerta de escalada ou cancelamento, o grafo pausa e só termina com a decisão do supervisor (app: botões; terminal: `--revisar`) |
+| **Checkpoint em SQLite** | no lote (`--retomar lote.sqlite`), conversas prontas vêm do checkpoint e as interrompidas retomam do último passo; só o que falhou é refeito |
+| **Subgrafo** | a ligação é `transcribe → [grafo do texto]`: a análise é o mesmo grafo, reaproveitado; a pausa do supervisor atravessa o subgrafo e retomar não transcreve de novo |
+
+Dois cuidados: o checkpoint em disco recebe a conversa **já anonimizada** (testado: o CPF não
+aparece no arquivo), e só tipos do próprio projeto podem ser lidos de volta do checkpoint
+(`allowed_msgpack_modules`; a suíte roda com `LANGGRAPH_STRICT_MSGPACK=true`).
+
+### As decisões de cada turno
 
 Cada turno vira **uma** requisição ao [Jev](https://docs.langchain.com/oss/python/integrations/providers/typesafe)
 (TypeSafe), com todas as perguntas daquele falante:
@@ -105,7 +128,9 @@ python -m sentiment_classifier analisar samples/04_sarcasmo.txt
 python -m sentiment_classifier ligacao samples/audio/ligacao_irritada.flac          # estéreo, local
 python -m sentiment_classifier ligacao gravacao_mono.mp3 --mono-openai              # mono, OpenAI
 python -m sentiment_classifier ligacao samples/audio/ligacao_irritada.flac --sem-voz  # comparação
+python -m sentiment_classifier analisar samples/01_calmo_para_irritado.txt --revisar  # pausa para você decidir
 python -m sentiment_classifier lote samples/ conversas.jsonl --saida relatorio      # CSV + JSONL
+python -m sentiment_classifier lote samples/ --retomar lote.sqlite                 # retoma se cair
 python -m sentiment_classifier csat avaliar relatorio.jsonl                          # com notas reais
 python -m sentiment_classifier csat treinar relatorio.jsonl --saida csat_model.json
 ```

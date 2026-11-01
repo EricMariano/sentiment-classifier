@@ -1,9 +1,17 @@
 import json
 from pathlib import Path
+from typing import Any
 
-from sentiment_classifier.batch import load_conversations, read_report, run_batch, write_reports
+from sentiment_classifier.batch import (
+    Conversation,
+    load_conversations,
+    read_report,
+    run_batch,
+    write_reports,
+)
 from sentiment_classifier.classify import OfflineHeuristicClassifier
-from sentiment_classifier.models import ReadResult, Turn
+from sentiment_classifier.models import Turn
+from sentiment_classifier.parsing import parse_chat
 
 
 def _write(tmp: Path) -> Path:
@@ -44,7 +52,7 @@ def test_bad_items_become_error_rows_and_the_batch_continues(tmp_path: Path) -> 
 class ExplodingClassifier:
     name = "explode"
 
-    def read(self, turns: list[Turn]) -> ReadResult:
+    def read_one(self, turns: list[Turn], index: int) -> Any:
         raise RuntimeError("provedor fora")
 
 
@@ -60,3 +68,47 @@ def test_reports_round_trip(tmp_path: Path) -> None:
     header = csv_path.read_text().splitlines()[0]
     assert "sinais" not in header and header.startswith("id,turnos")
     assert [r.id for r in read_report(jsonl_path)] == [r.id for r in rows]
+
+
+class CrashOnce(OfflineHeuristicClassifier):
+    """Cai uma vez ao ler a conversa que menciona 'modem', como um processo interrompido."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.crashed = False
+        self.reads: list[str] = []
+
+    def read_one(self, turns: Any, index: int) -> Any:
+        self.reads.append(turns[0].text[:12])
+        if "modem" in turns[index].text and not self.crashed:
+            self.crashed = True
+            raise RuntimeError("queda no meio do lote")
+        return super().read_one(turns, index)
+
+
+def test_batch_resumes_from_checkpoint_without_storing_personal_data(tmp_path: Path) -> None:
+    from sentiment_classifier.graph import sqlite_checkpointer
+
+    convs = [
+        Conversation(
+            "a", parse_chat("Cliente: Meu CPF é 123.456.789-09, obrigado!\nAtendente: Ok.")
+        ),
+        Conversation("b", parse_chat("Cliente: O modem caiu.\nAtendente: Vou verificar.")),
+    ]
+    db = tmp_path / "lote.sqlite"
+    classifier = CrashOnce()
+
+    first_stats: dict[str, int] = {}
+    first = run_batch(
+        convs, classifier, checkpointer=sqlite_checkpointer(str(db)), stats=first_stats
+    )
+    assert {r.id: bool(r.erro) for r in first} == {"a": False, "b": True}
+
+    classifier.reads.clear()
+    again: dict[str, int] = {}
+    second = run_batch(convs, classifier, checkpointer=sqlite_checkpointer(str(db)), stats=again)
+    assert all(not r.erro for r in second)
+    assert again == {"novas": 0, "retomadas": 1, "prontas": 1}
+    assert set(classifier.reads) == {"O modem caiu"}  # só a conversa que tinha parado
+
+    assert b"123.456.789-09" not in db.read_bytes()  # anonimizado antes do checkpoint
