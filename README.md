@@ -1,17 +1,33 @@
 # Sentiment Classifier
 
-Análise de conversas de atendimento em português do Brasil, em chat ou ligação gravada. O
-foco não é dizer se uma frase é positiva ou negativa, e sim entender a **dinâmica** da
-conversa:
+Análise de conversas de atendimento em português do Brasil, por chat ou ligação gravada.
+Em vez de dizer só se uma frase é positiva ou negativa, mostra **como a conversa evoluiu**:
+em que turno o cliente virou, qual fala do atendente veio antes, se há risco de cancelamento
+e que nota de satisfação o cliente daria.
 
-- **Trajetória:** o cliente entrou calmo e saiu irritado? Em que turno virou?
-- **Por pessoa:** a curva do cliente e, separada, a do tom do atendente.
-- **Pontos de virada:** qual fala do atendente veio logo antes da piora (ou da melhora)?
-- **Ação:** há risco de cancelamento? É preciso escalar? Que nota o cliente daria?
-- **Voz:** na ligação, o cliente falou mais alto, mais rápido, interrompeu?
+**Como:** o [Jev](https://docs.langchain.com/oss/python/integrations/providers/typesafe)
+(TypeSafe) toma as decisões baratas de cada turno; um LLM só escreve sobre os poucos momentos
+que importam. Dados pessoais são anonimizados antes de sair da máquina.
 
-**Status:** chat e ligação funcionando de ponta a ponta, com modo em lote. Os números de
-qualidade ainda são de pilotos pequenos (ver [Resultados](#resultados-até-agora)).
+| O que foi medido | Resultado |
+|---|---|
+| Jev × LLM fazendo o mesmo trabalho (Mistral Small 3.2) | **6 a 12× mais rápido**, ~35–40% mais barato, acerto igual ou um pouco melhor, bem menos alarme falso |
+| Nota de satisfação sem treino (297 atendimentos reais traduzidos) | ordena as conversas com Spearman **0,71** e acha **71%** dos clientes insatisfeitos |
+| Tempo até a curva e os alertas aparecerem na tela | **~1 s**; o resumo do LLM começa a aparecer em ~4 s |
+| A voz ajuda o Jev a detectar sarcasmo? (690 falas reais) | **Não**, com sinais simples de voz: AUC 0,81 só com texto, 0,81 com voz |
+
+![Curva da conversa: o sentimento do cliente (azul) e o tom do atendente (laranja) turno a turno, com o ponto de virada marcado](docs/img/curva.jpg)
+
+![Análise escrita pelo LLM a partir dos turnos-chave, ao lado dos alertas de cancelamento e escalada](docs/img/analise.jpg)
+
+Os números vêm de pilotos (uma execução cada, conversas traduzidas do chinês); método,
+limites e o que não funcionou estão em [Resultados](#resultados-até-agora) e em
+[`benchmarks/`](benchmarks/).
+
+```bash
+python3 -m venv .venv && .venv/bin/python -m pip install -e ".[app,audio,openrouter]"
+.venv/bin/python -m streamlit run app.py      # sem chaves, roda em modo offline
+```
 
 ## A ideia central: decisões baratas por turno, LLM só no que importa
 
