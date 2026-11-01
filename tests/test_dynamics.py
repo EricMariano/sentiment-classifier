@@ -1,6 +1,6 @@
 from conftest import reading
 
-from conversa_lens.dynamics import analyze_dynamics
+from sentiment_classifier.dynamics import analyze_dynamics
 
 
 def test_turning_points_point_at_agent_turns_in_between() -> None:

@@ -25,7 +25,7 @@ import numpy as np
 from dotenv import load_dotenv
 from langchain_typesafe import Noul, NoulCriteria, TypeSafeClassifier
 
-from conversa_lens.classify import Retry
+from sentiment_classifier.classify import Retry
 
 ROOT = Path(__file__).resolve().parents[2]
 DATA = ROOT / "benchmarks" / "data" / "mustard" / "mustard.jsonl"

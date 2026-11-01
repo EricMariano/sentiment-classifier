@@ -33,12 +33,12 @@ import numpy as np
 from dotenv import load_dotenv
 from langchain_typesafe import Choice, Noul, Score, TypeSafeClassifier
 
-from conversa_lens.anonymize import redact_turns
-from conversa_lens.classify import Retry
-from conversa_lens.csat import CSAT_QUESTION, _spearman, conversation_state
-from conversa_lens.parsing import turns_from_messages
-from conversa_lens.providers import chat_model
-from conversa_lens.questions import QUESTIONS, turn_state
+from sentiment_classifier.anonymize import redact_turns
+from sentiment_classifier.classify import Retry
+from sentiment_classifier.csat import CSAT_QUESTION, _spearman, conversation_state
+from sentiment_classifier.parsing import turns_from_messages
+from sentiment_classifier.providers import chat_model
+from sentiment_classifier.questions import QUESTIONS, turn_state
 
 ROOT = Path(__file__).resolve().parents[2]
 JEV_USD_PER_INPUT_TOKEN = 0.042 / 1e6

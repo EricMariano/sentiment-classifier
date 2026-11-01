@@ -8,13 +8,17 @@ from typing import Any
 
 from langchain_core.language_models import BaseChatModel
 
-from conversa_lens.cache import ResponseCache
-from conversa_lens.classify import JevTurnClassifier, OfflineHeuristicClassifier, TurnClassifier
-from conversa_lens.csat import CsatEstimator, CsatModel, JevCsatEstimator
-from conversa_lens.summarize import LLMSummarizer
+from sentiment_classifier.cache import ResponseCache
+from sentiment_classifier.classify import (
+    JevTurnClassifier,
+    OfflineHeuristicClassifier,
+    TurnClassifier,
+)
+from sentiment_classifier.csat import CsatEstimator, CsatModel, JevCsatEstimator
+from sentiment_classifier.summarize import LLMSummarizer
 
 DEFAULT_CSAT_MODEL = Path("csat_model.json")
-DEFAULT_CACHE = Path.home() / ".cache" / "conversa_lens" / "jev.sqlite"
+DEFAULT_CACHE = Path.home() / ".cache" / "sentiment_classifier" / "jev.sqlite"
 _cache: ResponseCache | None = None
 
 

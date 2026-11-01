@@ -16,10 +16,10 @@ from pathlib import Path
 import numpy as np
 from dotenv import load_dotenv
 
-from conversa_lens.anonymize import redact_turns
-from conversa_lens.csat import _spearman
-from conversa_lens.parsing import turns_from_messages
-from conversa_lens.providers import make_csat_estimator
+from sentiment_classifier.anonymize import redact_turns
+from sentiment_classifier.csat import _spearman
+from sentiment_classifier.parsing import turns_from_messages
+from sentiment_classifier.providers import make_csat_estimator
 
 
 def load(path: Path) -> dict[str, dict]:

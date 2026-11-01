@@ -1,9 +1,9 @@
 """Linha de comando.
 
-python -m conversa_lens analisar conversa.txt
-python -m conversa_lens lote pasta/ dados.jsonl --saida relatorio
-python -m conversa_lens csat avaliar relatorio.jsonl
-python -m conversa_lens csat treinar relatorio.jsonl --saida csat_model.json
+python -m sentiment_classifier analisar conversa.txt
+python -m sentiment_classifier lote pasta/ dados.jsonl --saida relatorio
+python -m sentiment_classifier csat avaliar relatorio.jsonl
+python -m sentiment_classifier csat treinar relatorio.jsonl --saida csat_model.json
 """
 
 from __future__ import annotations
@@ -15,19 +15,19 @@ from pathlib import Path
 from dotenv import load_dotenv
 from langchain_typesafe import TypeSafeClassifier
 
-from conversa_lens.batch import load_conversations, read_report, run_batch, write_reports
-from conversa_lens.csat import FEATURES, CsatModel, evaluate
-from conversa_lens.graph import analyze
-from conversa_lens.models import Turn
-from conversa_lens.parsing import parse_chat
-from conversa_lens.providers import (
+from sentiment_classifier.batch import load_conversations, read_report, run_batch, write_reports
+from sentiment_classifier.csat import FEATURES, CsatModel, evaluate
+from sentiment_classifier.graph import analyze
+from sentiment_classifier.models import Turn
+from sentiment_classifier.parsing import parse_chat
+from sentiment_classifier.providers import (
     has_jev,
     load_csat_model,
     make_classifier,
     make_csat_estimator,
     make_summarizer,
 )
-from conversa_lens.summarize import SummaryUnavailable
+from sentiment_classifier.summarize import SummaryUnavailable
 
 
 def cmd_analisar(args: argparse.Namespace) -> None:
@@ -37,8 +37,11 @@ def cmd_analisar(args: argparse.Namespace) -> None:
 def cmd_ligacao(args: argparse.Namespace) -> None:
     from dataclasses import replace
 
-    from conversa_lens.audio.pipeline import transcribe_call
-    from conversa_lens.audio.transcribe import LocalStereoTranscriber, OpenAIDiarizedTranscriber
+    from sentiment_classifier.audio.pipeline import transcribe_call
+    from sentiment_classifier.audio.transcribe import (
+        LocalStereoTranscriber,
+        OpenAIDiarizedTranscriber,
+    )
 
     transcriber = (
         OpenAIDiarizedTranscriber()
@@ -153,7 +156,7 @@ def cmd_csat_treinar(args: argparse.Namespace) -> None:
 
 def main() -> None:
     load_dotenv()
-    parser = argparse.ArgumentParser(prog="conversa_lens")
+    parser = argparse.ArgumentParser(prog="sentiment_classifier")
     sub = parser.add_subparsers(required=True)
 
     p = sub.add_parser("analisar", help="uma conversa, relatório detalhado")

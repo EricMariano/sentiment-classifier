@@ -25,10 +25,10 @@ from pathlib import Path
 import certifi
 from dotenv import load_dotenv
 
-from conversa_lens.batch import load_conversations
-from conversa_lens.graph import analyze
-from conversa_lens.providers import chat_model, make_classifier
-from conversa_lens.summarize import LLMSummarizer
+from sentiment_classifier.batch import load_conversations
+from sentiment_classifier.graph import analyze
+from sentiment_classifier.providers import chat_model, make_classifier
+from sentiment_classifier.summarize import LLMSummarizer
 
 ROOT = Path(__file__).resolve().parents[2]
 OUT = ROOT / "benchmarks" / "results" / "llm_resumos.jsonl"

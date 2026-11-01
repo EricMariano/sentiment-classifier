@@ -25,7 +25,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 from pydantic import BaseModel, field_validator
 
-from conversa_lens.providers import chat_model
+from sentiment_classifier.providers import chat_model
 
 LANGUAGES = {
     "pt": "português do Brasil, como num chat de atendimento brasileiro",

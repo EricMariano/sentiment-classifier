@@ -11,7 +11,7 @@ from collections.abc import Sequence
 
 from langchain_typesafe import Choice, Noul, NoulCriteria, Question, Score
 
-from conversa_lens.models import Speaker, Turn
+from sentiment_classifier.models import Speaker, Turn
 
 CONTEXT_TURNS = 4
 

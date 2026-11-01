@@ -17,8 +17,8 @@ só existem 2 conversas com nota 1). **Insatisfeita** = nota real abaixo de 2,5.
 ```bash
 python benchmarks/uss/prepare.py JDDC --por-nota 8 --saida benchmarks/data/jddc_piloto.jsonl
 python benchmarks/uss/translate.py benchmarks/data/jddc_piloto.jsonl --para pt   # e --para en
-python -m conversa_lens lote benchmarks/data/jddc_piloto_pt.jsonl --saida benchmarks/results/jddc_piloto_pt
-python -m conversa_lens csat avaliar benchmarks/results/jddc_piloto_pt.jsonl
+python -m sentiment_classifier lote benchmarks/data/jddc_piloto_pt.jsonl --saida benchmarks/results/jddc_piloto_pt
+python -m sentiment_classifier csat avaliar benchmarks/results/jddc_piloto_pt.jsonl
 ```
 
 ## 1. Piloto: 34 conversas, três línguas

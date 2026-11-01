@@ -14,7 +14,7 @@ from collections import Counter
 from collections.abc import Iterable
 from dataclasses import dataclass, replace
 
-from conversa_lens.models import Turn
+from sentiment_classifier.models import Turn
 
 _NAME = r"[A-ZÀ-Ý][a-zà-ÿ]+(?:\s+(?:d[aeo]s?\s+)?[A-ZÀ-Ý][a-zà-ÿ]+){0,3}"
 

@@ -11,9 +11,9 @@ from dataclasses import replace
 
 from langchain_typesafe import Choice, TypeSafeClassifier
 
-from conversa_lens.anonymize import redact_text
-from conversa_lens.audio.transcribe import Utterance
-from conversa_lens.classify import Retry
+from sentiment_classifier.anonymize import redact_text
+from sentiment_classifier.audio.transcribe import Utterance
+from sentiment_classifier.classify import Retry
 
 FIRST_LINES = 4
 

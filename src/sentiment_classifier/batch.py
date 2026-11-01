@@ -19,12 +19,12 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
-from conversa_lens.classify import TurnClassifier
-from conversa_lens.csat import CsatEstimator, CsatModel
-from conversa_lens.graph import AnalysisState, analyze
-from conversa_lens.models import Turn
-from conversa_lens.parsing import parse_chat, turns_from_messages
-from conversa_lens.summarize import Summarizer
+from sentiment_classifier.classify import TurnClassifier
+from sentiment_classifier.csat import CsatEstimator, CsatModel
+from sentiment_classifier.graph import AnalysisState, analyze
+from sentiment_classifier.models import Turn
+from sentiment_classifier.parsing import parse_chat, turns_from_messages
+from sentiment_classifier.summarize import Summarizer
 
 
 @dataclass(frozen=True)

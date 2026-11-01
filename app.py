@@ -12,19 +12,23 @@ import pandas as pd
 import streamlit as st
 from dotenv import load_dotenv
 
-from conversa_lens.batch import CSV_COLUMNS, load_conversations, run_batch
-from conversa_lens.classify import JevTurnClassifier, OfflineHeuristicClassifier, TurnClassifier
-from conversa_lens.graph import AnalysisState, analyze
-from conversa_lens.models import Turn
-from conversa_lens.parsing import parse_chat
-from conversa_lens.providers import (
+from sentiment_classifier.batch import CSV_COLUMNS, load_conversations, run_batch
+from sentiment_classifier.classify import (
+    JevTurnClassifier,
+    OfflineHeuristicClassifier,
+    TurnClassifier,
+)
+from sentiment_classifier.graph import AnalysisState, analyze
+from sentiment_classifier.models import Turn
+from sentiment_classifier.parsing import parse_chat
+from sentiment_classifier.providers import (
     has_jev,
     load_csat_model,
     make_classifier,
     make_csat_estimator,
     make_summarizer,
 )
-from conversa_lens.summarize import SummaryUnavailable
+from sentiment_classifier.summarize import SummaryUnavailable
 
 load_dotenv()
 ROOT = Path(__file__).parent
@@ -37,8 +41,8 @@ CAUSALITY = (
     "que ela causou a mudança. Use como ponto de partida para ouvir ou ler o trecho."
 )
 
-st.set_page_config(page_title="Conversa Lens", page_icon="💬", layout="wide")
-st.title("Conversa Lens")
+st.set_page_config(page_title="Sentiment Classifier", page_icon="💬", layout="wide")
+st.title("Sentiment Classifier")
 st.caption(
     "Análise de atendimento em PT-BR: o Jev lê cada turno (barato), "
     "o LLM só escreve sobre os momentos que mudaram a conversa."
@@ -327,8 +331,8 @@ with tab_batch:
 # --- Ligação (por último: depende do extra de áudio) --------------------------------------
 with tab_call:
     try:
-        from conversa_lens.audio.pipeline import transcribe_call
-        from conversa_lens.audio.transcribe import (
+        from sentiment_classifier.audio.pipeline import transcribe_call
+        from sentiment_classifier.audio.transcribe import (
             LocalStereoTranscriber,
             OpenAIDiarizedTranscriber,
         )

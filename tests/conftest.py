@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from conversa_lens.models import Speaker, Turn, TurnReading
+from sentiment_classifier.models import Speaker, Turn, TurnReading
 
 SAMPLES = Path(__file__).resolve().parent.parent / "samples"
 

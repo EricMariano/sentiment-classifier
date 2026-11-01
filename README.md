@@ -1,4 +1,4 @@
-# Conversa Lens
+# Sentiment Classifier
 
 Análise de conversas de atendimento em português do Brasil, em chat ou ligação gravada. O
 foco não é dizer se uma frase é positiva ou negativa, e sim entender a **dinâmica** da
@@ -44,13 +44,13 @@ Cada turno vira **uma** requisição ao [Jev](https://docs.langchain.com/oss/pyt
 
 O estado enviado é um JSON com o turno atual e os quatro anteriores como contexto. Numa
 ligação, o turno atual leva também `voz` (ver [Ligações](#ligações-áudio)). As perguntas
-estão em [`questions.py`](src/conversa_lens/questions.py).
+estão em [`questions.py`](src/sentiment_classifier/questions.py).
 
-A agregação ([`dynamics.py`](src/conversa_lens/dynamics.py)) é código comum e testado: curvas
+A agregação ([`dynamics.py`](src/sentiment_classifier/dynamics.py)) é código comum e testado: curvas
 por pessoa, ponto de virada quando o sentimento do cliente muda 1 ponto ou mais entre dois
 turnos dele, e alertas quando uma probabilidade passa de 0,7. O LLM recebe **só os turnos
 desses momentos** e os sinais já calculados, nunca a conversa inteira
-([`summarize.py`](src/conversa_lens/summarize.py)). Se nada aconteceu, ele nem é chamado.
+([`summarize.py`](src/sentiment_classifier/summarize.py)). Se nada aconteceu, ele nem é chamado.
 
 **Sentimento, emoção e intenção ficam separados.** Um cliente educado pode estar decidido a
 cancelar: a amostra [`03`](samples/03_educado_decidido_a_cancelar.txt) existe para isso.
@@ -85,13 +85,13 @@ não dizem nada sobre o Jev**, e o app avisa na tela. Para os serviços reais, c
 Pela linha de comando:
 
 ```bash
-python -m conversa_lens analisar samples/04_sarcasmo.txt
-python -m conversa_lens ligacao samples/audio/ligacao_irritada.flac          # estéreo, local
-python -m conversa_lens ligacao gravacao_mono.mp3 --mono-openai              # mono, OpenAI
-python -m conversa_lens ligacao samples/audio/ligacao_irritada.flac --sem-voz  # comparação
-python -m conversa_lens lote samples/ conversas.jsonl --saida relatorio      # CSV + JSONL
-python -m conversa_lens csat avaliar relatorio.jsonl                          # com notas reais
-python -m conversa_lens csat treinar relatorio.jsonl --saida csat_model.json
+python -m sentiment_classifier analisar samples/04_sarcasmo.txt
+python -m sentiment_classifier ligacao samples/audio/ligacao_irritada.flac          # estéreo, local
+python -m sentiment_classifier ligacao gravacao_mono.mp3 --mono-openai              # mono, OpenAI
+python -m sentiment_classifier ligacao samples/audio/ligacao_irritada.flac --sem-voz  # comparação
+python -m sentiment_classifier lote samples/ conversas.jsonl --saida relatorio      # CSV + JSONL
+python -m sentiment_classifier csat avaliar relatorio.jsonl                          # com notas reais
+python -m sentiment_classifier csat treinar relatorio.jsonl --saida csat_model.json
 ```
 
 Entradas: chat com uma fala por linha (`Cliente:` / `Atendente:`, aceita `Agente:`,
@@ -101,7 +101,7 @@ datasets; `nota` é opcional).
 
 ## Ligações (áudio)
 
-[`audio/`](src/conversa_lens/audio/) transforma a gravação em turnos e mede a voz.
+[`audio/`](src/sentiment_classifier/audio/) transforma a gravação em turnos e mede a voz.
 
 **Quem falou o quê.**
 
@@ -116,7 +116,7 @@ datasets; `nota` é opcional).
   anonimização.** A alternativa local seria o pyannote (exige ffmpeg, torch e token do
   Hugging Face); fica como extensão.
 
-**Sinais de voz por turno** ([`acoustics.py`](src/conversa_lens/audio/acoustics.py)), simples
+**Sinais de voz por turno** ([`acoustics.py`](src/sentiment_classifier/audio/acoustics.py)), simples
 e conferíveis, sem modelo de emoção na voz:
 
 | Sinal | Como é medido |
@@ -142,7 +142,7 @@ ligação (+6 dB); interrompeu o outro"*:
 
 ## Satisfação (CSAT)
 
-Duas camadas ([`csat.py`](src/conversa_lens/csat.py)), para não chamar de previsão o que
+Duas camadas ([`csat.py`](src/sentiment_classifier/csat.py)), para não chamar de previsão o que
 ainda não foi validado:
 
 1. **Estimativa, sem treino:** uma pergunta `Score` ao Jev sobre a conversa inteira ("que
@@ -190,7 +190,7 @@ O que foi feito, com o efeito medido:
 - **Lote com várias conversas ao mesmo tempo** (`--paralelo`, padrão 4). 34 conversas:
   38,8 s com uma por vez, 15,0 s com quatro; com oito, 14,7 s (o limite passa a ser o
   servidor).
-- **Cache das respostas do Jev** (SQLite em `~/.cache/conversa_lens/`, `CONVERSA_CACHE=0`
+- **Cache das respostas do Jev** (SQLite em `~/.cache/sentiment_classifier/`, `CONVERSA_CACHE=0`
   desliga). O mesmo lote de 34 conversas, de novo: 0,8 s. O Jev varia um pouco entre
   chamadas (até 0,12 ponto na satisfação); com o cache, a mesma conversa dá sempre o mesmo
   resultado.
@@ -348,7 +348,7 @@ e as falhas parciais; o áudio é testado com sinais sintéticos. Nenhum teste c
 externo nem baixa modelo.
 
 ```
-src/conversa_lens/
+src/sentiment_classifier/
   parsing.py      chat em texto ou mensagens → turnos
   anonymize.py    dados pessoais → marcadores
   questions.py    perguntas ao Jev por falante

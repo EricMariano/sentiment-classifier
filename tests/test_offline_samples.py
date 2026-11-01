@@ -7,9 +7,9 @@ from pathlib import Path
 
 import pytest
 
-from conversa_lens.classify import OfflineHeuristicClassifier
-from conversa_lens.graph import analyze
-from conversa_lens.parsing import parse_chat
+from sentiment_classifier.classify import OfflineHeuristicClassifier
+from sentiment_classifier.graph import analyze
+from sentiment_classifier.parsing import parse_chat
 
 
 def _run(samples: Path, name: str):  # type: ignore[no-untyped-def]

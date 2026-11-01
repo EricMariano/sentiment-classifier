@@ -7,10 +7,10 @@ from pathlib import Path
 
 from langchain_typesafe import TypeSafeClassifier
 
-from conversa_lens.audio.acoustics import CallTurn, call_turns, to_turns
-from conversa_lens.audio.roles import agent_label, assign_roles
-from conversa_lens.audio.transcribe import Transcriber, Transcript
-from conversa_lens.models import Turn
+from sentiment_classifier.audio.acoustics import CallTurn, call_turns, to_turns
+from sentiment_classifier.audio.roles import agent_label, assign_roles
+from sentiment_classifier.audio.transcribe import Transcriber, Transcript
+from sentiment_classifier.models import Turn
 
 
 @dataclass

@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 
-from conversa_lens.models import (
+from sentiment_classifier.models import (
     SPEAKERS,
     Alert,
     AlertKind,

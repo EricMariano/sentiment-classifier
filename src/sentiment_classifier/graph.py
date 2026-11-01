@@ -14,18 +14,18 @@ from typing import Literal, TypedDict
 from langgraph.graph import END, START, StateGraph
 from langgraph.graph.state import CompiledStateGraph
 
-from conversa_lens.anonymize import redact_turns
-from conversa_lens.classify import GaveUp, TurnClassifier
-from conversa_lens.csat import (
+from sentiment_classifier.anonymize import redact_turns
+from sentiment_classifier.classify import GaveUp, TurnClassifier
+from sentiment_classifier.csat import (
     CsatEstimate,
     CsatEstimator,
     CsatModel,
     conversation_features,
     offline_estimate,
 )
-from conversa_lens.dynamics import analyze_dynamics
-from conversa_lens.models import Dynamics, Turn, TurnFailure, TurnReading
-from conversa_lens.summarize import (
+from sentiment_classifier.dynamics import analyze_dynamics
+from sentiment_classifier.models import Dynamics, Turn, TurnFailure, TurnReading
+from sentiment_classifier.summarize import (
     Summarizer,
     Summary,
     SummaryUnavailable,

@@ -10,9 +10,9 @@ from langchain_typesafe.client import (
     TypeSafeRateLimitError,
 )
 
-from conversa_lens.classify import JevTurnClassifier, Retry
-from conversa_lens.models import Turn
-from conversa_lens.questions import AGENT_QUESTIONS, CUSTOMER_QUESTIONS
+from sentiment_classifier.classify import JevTurnClassifier, Retry
+from sentiment_classifier.models import Turn
+from sentiment_classifier.questions import AGENT_QUESTIONS, CUSTOMER_QUESTIONS
 
 
 def _response(speaker: str) -> ClassifierResponse:

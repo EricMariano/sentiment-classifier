@@ -1,5 +1,5 @@
-from conversa_lens.anonymize import redact_text, redact_turns
-from conversa_lens.models import Turn
+from sentiment_classifier.anonymize import redact_text, redact_turns
+from sentiment_classifier.models import Turn
 
 
 def test_structured_identifiers() -> None:

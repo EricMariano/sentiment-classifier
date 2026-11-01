@@ -19,9 +19,9 @@ from langchain_typesafe.client import (
     TypeSafeRateLimitError,
 )
 
-from conversa_lens.cache import ResponseCache, model_name, request_key
-from conversa_lens.models import ReadResult, Turn, TurnFailure, TurnReading
-from conversa_lens.questions import (
+from sentiment_classifier.cache import ResponseCache, model_name, request_key
+from sentiment_classifier.models import ReadResult, Turn, TurnFailure, TurnReading
+from sentiment_classifier.questions import (
     AGENT_POSTURES,
     CUSTOMER_EMOTIONS,
     LABEL_QUESTION,

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 
-from conversa_lens.models import Speaker, Turn
+from sentiment_classifier.models import Speaker, Turn
 
 _ALIASES: dict[str, Speaker] = {
     "cliente": "cliente",

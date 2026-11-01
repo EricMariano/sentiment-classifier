@@ -4,7 +4,7 @@ from pathlib import Path
 import pytest
 from conftest import reading
 
-from conversa_lens.csat import (
+from sentiment_classifier.csat import (
     FEATURES,
     CsatModel,
     _spearman,
@@ -13,7 +13,7 @@ from conversa_lens.csat import (
     evaluate,
     metrics,
 )
-from conversa_lens.dynamics import analyze_dynamics
+from sentiment_classifier.dynamics import analyze_dynamics
 
 
 def _row(**values: float) -> dict[str, float]:

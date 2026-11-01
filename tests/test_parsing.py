@@ -1,6 +1,6 @@
 import pytest
 
-from conversa_lens.parsing import parse_chat, turns_from_messages
+from sentiment_classifier.parsing import parse_chat, turns_from_messages
 
 
 def test_aliases_continuation_and_merge() -> None:

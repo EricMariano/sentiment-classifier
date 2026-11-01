@@ -10,7 +10,7 @@ de séries em inglês (Friends, The Big Bang Theory, Golden Girls, Sarcasmaholic
 sarcásticas, com as falas anteriores como contexto e o vídeo da fala-alvo.
 
 - Áudio da fala-alvo extraído do vídeo, mono 16 kHz ([`prepare.py`](prepare.py)).
-- Sinais do app (`conversa_lens.audio.acoustics`): volume, tom, **variação do tom**
+- Sinais do app (`sentiment_classifier.audio.acoustics`): volume, tom, **variação do tom**
   (acrescentada antes de rodar, por ser associada a sarcasmo na literatura) e velocidade,
   relativos à mediana daquele personagem no dataset, mais a leitura em palavras.
 - Uma pergunta `Noul` ("a fala é sarcástica ou irônica?"), igual nas duas condições. Cada fala

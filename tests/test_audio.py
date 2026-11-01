@@ -8,9 +8,9 @@ import pytest
 
 pytest.importorskip("librosa")
 
-from conversa_lens.audio.acoustics import call_turns, describe, measure, to_turns  # noqa: E402
-from conversa_lens.audio.roles import agent_label, assign_roles  # noqa: E402
-from conversa_lens.audio.transcribe import (  # noqa: E402
+from sentiment_classifier.audio.acoustics import call_turns, describe, measure, to_turns  # noqa: E402
+from sentiment_classifier.audio.roles import agent_label, assign_roles  # noqa: E402
+from sentiment_classifier.audio.transcribe import (  # noqa: E402
     SAMPLE_RATE,
     Transcript,
     Utterance,

@@ -24,9 +24,9 @@ from typing import Literal, Protocol
 import numpy as np
 from langchain_typesafe import ClassifierRequest, Score, TypeSafeClassifier
 
-from conversa_lens.cache import ResponseCache
-from conversa_lens.classify import Retry
-from conversa_lens.models import Dynamics, Turn, TurnReading
+from sentiment_classifier.cache import ResponseCache
+from sentiment_classifier.classify import Retry
+from sentiment_classifier.models import Dynamics, Turn, TurnReading
 
 CSAT_QUESTION = Score(
     instructions=(

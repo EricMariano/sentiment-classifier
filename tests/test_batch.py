@@ -1,9 +1,9 @@
 import json
 from pathlib import Path
 
-from conversa_lens.batch import load_conversations, read_report, run_batch, write_reports
-from conversa_lens.classify import OfflineHeuristicClassifier
-from conversa_lens.models import ReadResult, Turn
+from sentiment_classifier.batch import load_conversations, read_report, run_batch, write_reports
+from sentiment_classifier.classify import OfflineHeuristicClassifier
+from sentiment_classifier.models import ReadResult, Turn
 
 
 def _write(tmp: Path) -> Path:

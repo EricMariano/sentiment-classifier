@@ -31,8 +31,8 @@ import av
 import numpy as np
 import soundfile as sf
 
-from conversa_lens.audio.acoustics import MIN_WORDS_FOR_RATE, RawSignals, describe, measure
-from conversa_lens.audio.transcribe import SAMPLE_RATE
+from sentiment_classifier.audio.acoustics import MIN_WORDS_FOR_RATE, RawSignals, describe, measure
+from sentiment_classifier.audio.transcribe import SAMPLE_RATE
 
 DATA = Path(__file__).resolve().parents[1] / "data" / "mustard"
 REF_WORDS = "o normal deste personagem"

@@ -16,7 +16,7 @@ from langchain_core.exceptions import (
 from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import BaseMessage, BaseMessageChunk, HumanMessage, SystemMessage
 
-from conversa_lens.models import Dynamics, Turn, TurnReading
+from sentiment_classifier.models import Dynamics, Turn, TurnReading
 
 
 @dataclass(frozen=True)

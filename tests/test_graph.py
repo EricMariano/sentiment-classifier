@@ -4,12 +4,12 @@ from dataclasses import dataclass, field
 import pytest
 from conftest import reading
 
-from conversa_lens.classify import GaveUp
-from conversa_lens.csat import CsatEstimate, CsatModel
-from conversa_lens.graph import analyze
-from conversa_lens.models import Dynamics, ReadResult, Turn, TurnFailure, TurnReading
-from conversa_lens.parsing import parse_chat
-from conversa_lens.summarize import Summary, SummaryUnavailable, build_prompt
+from sentiment_classifier.classify import GaveUp
+from sentiment_classifier.csat import CsatEstimate, CsatModel
+from sentiment_classifier.graph import analyze
+from sentiment_classifier.models import Dynamics, ReadResult, Turn, TurnFailure, TurnReading
+from sentiment_classifier.parsing import parse_chat
+from sentiment_classifier.summarize import Summary, SummaryUnavailable, build_prompt
 
 
 @dataclass

@@ -4,8 +4,8 @@ from typing import Any
 
 import pytest
 
-from conversa_lens import providers
-from conversa_lens.summarize import is_transient
+from sentiment_classifier import providers
+from sentiment_classifier.summarize import is_transient
 
 
 @pytest.fixture

@@ -3,7 +3,7 @@ requires = ["hatchling>=1.27,<2"]
 build-backend = "hatchling.build"
 
 [project]
-name = "conversa-lens"
+name = "sentiment-classifier"
 version = "0.1.0"
 description = "Análise de conversas de atendimento em PT-BR: decisões baratas por turno com Jev, LLM só nos momentos-chave."
 readme = "README.md"
@@ -31,7 +31,7 @@ openai = ["openai>=1.100,<3", "langchain-openai>=1,<2"]
 dev = ["mypy>=1.13,<3", "pytest>=8.3,<10", "ruff>=0.11,<1"]
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/conversa_lens"]
+packages = ["src/sentiment_classifier"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

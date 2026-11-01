@@ -19,7 +19,7 @@ class Turn:
     text: str
     voice: dict[str, float | str] | None = None
     """Sinais do áudio (só em ligações), relativos ao começo da ligação do falante. Vão
-    para o Jev junto com o texto. Ver ``conversa_lens.audio.acoustics``."""
+    para o Jev junto com o texto. Ver ``sentiment_classifier.audio.acoustics``."""
 
 
 @dataclass(frozen=True)

@@ -22,8 +22,8 @@ from statistics import median
 
 import numpy as np
 
-from conversa_lens.audio.transcribe import SAMPLE_RATE, Transcript, Utterance
-from conversa_lens.models import Speaker, Turn
+from sentiment_classifier.audio.transcribe import SAMPLE_RATE, Transcript, Utterance
+from sentiment_classifier.models import Speaker, Turn
 
 _FRAME, _HOP = 1024, 256
 _SILENCE_DB = -45.0

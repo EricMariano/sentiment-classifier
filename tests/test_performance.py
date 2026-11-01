@@ -13,12 +13,12 @@ from conftest import reading
 from langchain_core.exceptions import ModelAuthenticationError, ModelRateLimitError
 from test_jev_adapter import TURNS, FakeClient
 
-from conversa_lens.batch import Conversation, run_batch
-from conversa_lens.cache import ResponseCache
-from conversa_lens.classify import JevTurnClassifier, OfflineHeuristicClassifier, Retry
-from conversa_lens.dynamics import analyze_dynamics
-from conversa_lens.models import Turn
-from conversa_lens.summarize import LLMSummarizer, SummaryUnavailable, is_transient
+from sentiment_classifier.batch import Conversation, run_batch
+from sentiment_classifier.cache import ResponseCache
+from sentiment_classifier.classify import JevTurnClassifier, OfflineHeuristicClassifier, Retry
+from sentiment_classifier.dynamics import analyze_dynamics
+from sentiment_classifier.models import Turn
+from sentiment_classifier.summarize import LLMSummarizer, SummaryUnavailable, is_transient
 
 # --- cache ---------------------------------------------------------------------------------
 
