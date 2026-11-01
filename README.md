@@ -246,6 +246,18 @@ JD.com, nota de anotadores; piloto em chinês, português e inglês e detalhes e
   `gpt-5-nano` dão Spearman 0,63 e 0,66 (diferença dentro do ruído; ver o README do
   benchmark). O Mistral traduz por um quinto do custo.
 
+**Jev × LLM fazendo o mesmo trabalho** (Mistral Small 3.2, mesmas perguntas e rubricas;
+detalhes em [`benchmarks/jev_vs_llm/`](benchmarks/jev_vs_llm/README.md)):
+
+| | satisfação: Spearman | tempo por turno | custo por 1.000 turnos | alertas de cancelamento (759 turnos) |
+|---|---:|---:|---:|---:|
+| **Jev** | **0,71** | **0,20 s** | **US$ 0,06** | 3 |
+| Mistral Small 3.2 | 0,65 | 2,46 s | US$ 0,10 | 28 (a maioria era cancelar pedido, não a empresa) |
+
+O Jev faz o mesmo trabalho 6 a 12× mais rápido, ~35–40% mais barato, com acerto igual ou um
+pouco melhor (ΔSpearman +0,06, IC95% [+0,01; +0,11]). A economia é menor que a do paper porque
+o LLM comparado já é muito barato. Preço do Jev de fontes de terceiros.
+
 **Voz, duas ligações sintéticas com o mesmo texto** ([`samples/audio/`](samples/audio/);
 medido antes da troca para a transcrição em lotes, que mudou só a pontuação dessas falas):
 
