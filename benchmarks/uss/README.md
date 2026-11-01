@@ -69,11 +69,24 @@ Notas: 2 / 74 / 74 / 73 / 74 conversas com nota 1 / 2 / 3 / 4 / 5 (arredondada).
   erra menos o valor, mas fica conservador: acha só 27 das 76 insatisfeitas, com 5 alarmes
   falsos. Os sinais que mais pesam são a estimativa do Jev e o sentimento médio do cliente.
 
-**Por tradutor** (estimativa do Jev): Spearman 0,74 nas 207 do `gpt-5-nano` (IC95%
-0,66–0,80) e 0,63 nas 90 do Mistral (IC95% 0,48–0,75). Diferença +0,11, IC95%
-[−0,03; +0,26]: **inconclusiva**. As conversas das duas partes têm tamanho parecido (~21
-turnos). Para separar tradutor de acaso, o teste certo é traduzir as mesmas conversas com os
-dois modelos e comparar, como foi feito entre chinês e português no piloto.
+**Por tradutor.** Nas 207 do `gpt-5-nano` o Spearman foi 0,74; nas 90 do Mistral, 0,63. Para
+saber se era o tradutor, as mesmas 90 foram traduzidas também com `gpt-5-nano` pela
+OpenRouter (89 passaram nas checagens) e o Jev estimou a satisfação nas duas versões
+([`translator_check.py`](translator_check.py)):
+
+| | Spearman com a nota real | MAE | insatisfeitas achadas |
+|---|---:|---:|---:|
+| tradução Mistral Small 3.2 | 0,63 | 0,81 | 16 de 24 |
+| tradução `gpt-5-nano` | 0,66 | 0,78 | 16 de 24 |
+
+- A mesma conversa, traduzida pelos dois, recebe quase a mesma nota (Spearman 0,94 entre as
+  versões; diferença média 0,21 ponto).
+- ΔSpearman +0,03, IC95% [−0,04; +0,09]: **o tradutor não explica a diferença.** Aquelas 90
+  conversas são, simplesmente, mais difíceis.
+- Pela OpenRouter, o `gpt-5-nano` só traduziu com `--metodo json_schema`; com o padrão
+  (`function_calling`), devolveu o original em chinês em 49 de 90 conversas, e a checagem de
+  texto não traduzido rejeitou todas. Custo do teste: ~US$ 0,80, quase tudo em tokens de
+  raciocínio do `gpt-5-nano` (o Mistral traduziu as 90 por US$ 0,16).
 
 Na primeira versão desta seção, com 207 conversas (só `gpt-5-nano`): estimativa do Jev
 Spearman 0,74 e 38 de 52 insatisfeitas; modelo calibrado MAE 0,60 e Spearman 0,74.

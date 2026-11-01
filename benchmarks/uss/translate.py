@@ -129,6 +129,12 @@ def main() -> None:
         "--modelo", default=os.environ.get("CONVERSA_CHAT_MODEL", "openai:gpt-5-nano")
     )
     parser.add_argument("--paralelo", type=int, default=8)
+    parser.add_argument(
+        "--metodo",
+        choices=["function_calling", "json_schema"],
+        default="function_calling",
+        help="como pedir a resposta estruturada (pela OpenRouter, o gpt-5-nano só traduz com json_schema)",
+    )
     args = parser.parse_args()
 
     out_path = args.entrada.with_name(f"{args.entrada.stem}_{args.para}.jsonl")
@@ -139,7 +145,7 @@ def main() -> None:
     todo = [r for r in rows if r["id"] not in done]
     print(f"{len(done)} já traduzidas, {len(todo)} a traduzir com {args.modelo}")
 
-    model = chat_model(args.modelo).with_structured_output(Translation)
+    model = chat_model(args.modelo).with_structured_output(Translation, method=args.metodo)
     failed = 0
     with ThreadPoolExecutor(args.paralelo) as pool, out_path.open("a") as f:
         futures = [pool.submit(translate, model, r, args.para, args.modelo) for r in todo]

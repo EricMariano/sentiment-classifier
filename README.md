@@ -242,8 +242,9 @@ JD.com, nota de anotadores; piloto em chinês, português e inglês e detalhes e
 - Sem treino, o Jev ordena bem e acha 71% das insatisfeitas, mas comprime a escala.
 - Com ~300 conversas, o modelo calibrado erra menos e ordena melhor, mas acha menos
   insatisfeitas. Para triagem, a estimativa pura; para o número, o calibrado.
-- Duas partes da amostra foram traduzidas por modelos diferentes; a diferença entre elas é
-  inconclusiva (ver o README do benchmark).
+- O tradutor não muda o resultado: as mesmas 89 conversas traduzidas por Mistral e por
+  `gpt-5-nano` dão Spearman 0,63 e 0,66 (diferença dentro do ruído; ver o README do
+  benchmark). O Mistral traduz por um quinto do custo.
 
 **Voz, duas ligações sintéticas com o mesmo texto** ([`samples/audio/`](samples/audio/);
 medido antes da troca para a transcrição em lotes, que mudou só a pontuação dessas falas):
